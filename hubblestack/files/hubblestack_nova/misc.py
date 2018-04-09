@@ -973,6 +973,45 @@ def check_if_any_pkg_installed(args):
             break
     return result
 
+def ensure_max_password_expiration(args):
+    '''
+    Ensure max password expiration days is set to the value less than or equal to that given in args
+    '''
+    grep_args = []
+    max_passwd_expiry = str(args)
+    max_pass_days_output = _grep('/etc/login.defs', 'PASS_MAX_DAYS', *grep_args).get('stdout')
+    grep_words = max_pass_days_output.split()
+
+    max_days_check_pass=False
+    for word in grep_words:
+        if is_int(word) and word <= max_passwd_expiry:
+            max_days_check_pass=True
+
+    if not max_days_check_pass:
+        return "PASS_MAX_DAYS must be less than or equal to " + max_passwd_expiry
+    #fetch all users with passwords
+    grep_args.append('-E')
+    all_users = _grep('/etc/shadow', '^[^:]+:[^\!*]', *grep_args).get('stdout')
+
+    violating_users = []
+    for line in all_users.split('\n'):
+        user = line.split(':')[0]
+        #As per CIS doc, 5th field is the password max expiry days
+        user_passwd_expiry = line.split(':')[4] 
+        if is_int(user_passwd_expiry) and int(user_passwd_expiry) > int(max_passwd_expiry):
+            violating_users.append(user)
+            
+    if violating_users:
+        return 'Users ' + str(violating_users) + ' have max password expiry days more than ' + max_passwd_expiry
+    else:
+        return True   
+            
+def is_int(input):
+  try:
+    num = int(input)
+  except ValueError:
+    return False
+  return True
 
 def test_success():
     '''
@@ -1035,5 +1074,6 @@ FUNCTION_MAP = {
     'check_list_values': check_list_values,
     'mail_conf_check': mail_conf_check,
     'check_if_any_pkg_installed': check_if_any_pkg_installed,
+    'ensure_max_password_expiration': ensure_max_password_expiration,
 
 }
